@@ -1,16 +1,8 @@
 add_rules("mode.debug", "mode.release")
-
--- if is_os("windows") then
---     if(is_mode("release")) then
---         set_config("vs_runtime", "MD")
---     else
---         set_config("vs_runtime", "MDd")
---     end
--- else
---     add_cxflags("-MD")
--- end
+set_policy("package.install_always", true)
 
 package("zlib")
+
     set_homepage("http://www.zlib.net")
     set_description("A Massively Spiffy Yet Delicately Unobtrusive Compression Library")
 
@@ -76,25 +68,28 @@ package("zlib")
             configs.cxflags = "-fPIC"
         end
         import("package.tools.xmake").install(package, configs)
+
     end)
 
     on_test(function (package)
         assert(package:has_cfuncs("inflate", {includes = "zlib.h"}))
     end)
+
 package_end()
 
 package("openssl")
-
-    set_homepage("https://www.openssl.org/")
-    set_description("A robust, commercial-grade, and full-featured toolkit for TLS and SSL.")
-
-    add_urls("https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_$(version).zip", {version = function (version)
-        return version:gsub("^(%d+)%.(%d+)%.(%d+)-?(%a*)$", "%1_%2_%3%4")
-    end, excludes = "*/fuzz/*"})
+    set_policy("package.install_always", true)
+    -- add_urls("https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_$(version).zip", {version = function (version)
+    --     return version:gsub("^(%d+)%.(%d+)%.(%d+)-?(%a*)$", "%1_%2_%3%4")
+    -- end, excludes = "*/fuzz/*"})
     add_versions("1.1.1-q", "df86e6adcff1c91a85cef139dd061ea40b7e49005e8be16522cf4864bfcf5eb8")
-    add_patches("1.1.1-q", path.join(os.scriptdir(), "patches", "1.1.1q.diff"), "cfe6929f9db2719e695be0b61f8c38fe8132544c5c58ca8d07383bfa6c675b7b")
-
+    -- add_patches("1.1.1-q", path.join(os.scriptdir(), "patches", "1.1.1q.diff"), "cfe6929f9db2719e695be0b61f8c38fe8132544c5c58ca8d07383bfa6c675b7b")
+    set_sourcedir("/home/rhel/.xmake/cache/packages/2211/o/openssl/1.1.1-q")
     on_fetch("fetch")
+
+    -- 设置基础数据类型
+    add_configs("options", {description = "option features switch", default = {}, type = "table"})
+
 
     on_load(function (package)
         if package:is_plat("windows") and (not package.is_built or package:is_built()) then
@@ -120,56 +115,10 @@ package("openssl")
         end
     end)
 
-    on_install("windows", function (package)
-        local configs = {"Configure"}
-        local target
-        if package:is_arch("x86", "i386") then
-            target = "VC-WIN32"
-        elseif package:is_arch("arm64") then
-            target = "VC-WIN64-ARM"
-        elseif package:is_arch("arm.*") then
-            target = "VC-WIN32-ARM"
-        else
-            target = "VC-WIN64A"
-        end
-        table.insert(configs, target)
-        table.insert(configs, package:config("shared") and "shared" or "no-shared")
-        table.insert(configs, "--prefix=" .. package:installdir())
-        table.insert(configs, "--openssldir=" .. package:installdir())
-        os.vrunv("perl", configs)
-        import("package.tools.nmake").install(package)
-    end)
 
-    on_install("mingw", function (package)
-        local configs = {"Configure", "no-tests"}
-        table.insert(configs, package:is_arch("i386", "x86") and "mingw" or "mingw64")
-        table.insert(configs, package:config("shared") and "shared" or "no-shared")
-        local installdir = package:installdir()
-        -- Use MSYS2 paths instead of Windows paths
-        if is_subhost("msys") then
-            installdir = installdir:gsub("(%a):[/\\](.+)", "/%1/%2"):gsub("\\", "/")
-        end
-        table.insert(configs, "--prefix=" .. installdir)
-        table.insert(configs, "--openssldir=" .. installdir)
-        local buildenvs = import("package.tools.autoconf").buildenvs(package)
-        buildenvs.RC = package:build_getenv("mrc")
-        if is_subhost("msys") then
-            local rc = buildenvs.RC
-            if rc then
-                rc = rc:gsub("(%a):[/\\](.+)", "/%1/%2"):gsub("\\", "/")
-                buildenvs.RC = rc
-            end
-        end
-        -- fix 'cp: directory fuzz does not exist'
-        if package:config("shared") then
-            os.mkdir("fuzz")
-        end
-        os.vrunv("perl", configs, {envs = buildenvs})
-        import("package.tools.make").build(package)
-        import("package.tools.make").make(package, {"install_sw"})
-    end)
-
-    on_install("linux", "macosx", "bsd", function (package)
+    on_install("linux", "macosx", "bsd", function (package, opts)
+        local option_features = package:config("options")
+        local nilval
         -- https://wiki.openssl.org/index.php/Compilation_and_Installation#PREFIX_and_OPENSSLDIR
         local buildenvs = import("package.tools.autoconf").buildenvs(package)
         local configs = {"--openssldir=" .. package:installdir(),
@@ -178,6 +127,30 @@ package("openssl")
         if package:debug() then
             table.insert(configs, "--debug")
         end
+
+        --设定其他fearture
+        if option_features then
+            for k, v in pairs(option_features) do
+                --todo:判断type
+                if v then table.insert(configs, string.format("%s", string.gsub(k, "_", "-"))) end
+            end
+        end
+        --windows怎么拼接?
+        local packagep = path.join("~", ".xmake", "packages")
+        print("pckages")
+        print(packagep)
+        print(opts)
+        local deps_zlib = find_package("xmake::zlib", {
+                buildhash = "54e8ae08e1274b7daba559de532d08dd",
+                require_version = "v1.2.10", version = true,
+                packagedirs = {"/home/rhel/.xmake/packages"}            
+            }
+        )
+        -- 指定zlib
+        table.insert(configs, "--with-zlib-lib=" .. deps_zlib["linkdirs"][1])
+        --调试用
+        --print(configs .. nilval)
+
         os.vrunv("./config", configs, {envs = buildenvs})
         local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
         import("package.tools.make").build(package, makeconfigs)
@@ -187,57 +160,104 @@ package("openssl")
         end
     end)
 
-    on_install("cross", "android", function (package)
-
-        local target_arch = "generic32"
-        if package:is_arch("x86_64") then
-            target_arch = "x86_64"
-        elseif package:is_arch("i386", "x86") then
-            target_arch = "x86"
-        elseif package:is_arch("arm64", "arm64-v8a") then
-            target_arch = "aarch64"
-        elseif package:is_arch("arm.*") then
-            target_arch = "armv4"
-        elseif package:is_arch(".*64") then
-            target_arch = "generic64"
-        end
-
-        local target_plat = "linux"
-        if package:is_plat("macosx") then
-            target_plat = "darwin64"
-            target_arch = "x86_64-cc"
-        end
-
-        local target = target_plat .. "-" .. target_arch
-        local configs = {target,
-                         "-DOPENSSL_NO_HEARTBEATS",
-                         "no-shared",
-                         "no-threads",
-                         "--openssldir=" .. package:installdir(),
-                         "--prefix=" .. package:installdir()}
-        local buildenvs = import("package.tools.autoconf").buildenvs(package)
-        os.vrunv("./Configure", configs, {envs = buildenvs})
-        local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
-        import("package.tools.make").build(package, makeconfigs)
-        import("package.tools.make").make(package, {"install_sw"})
-    end)
 
     on_test(function (package)
         assert(package:has_cfuncs("SSL_new", {includes = "openssl/ssl.h"}))
     end)
+
 package_end()
 
---
---{configs = {toolchains = "gcc-11"}})
-add_requires("zlib v1.2.10", {configs = {shared = false, pic = true}, system = false, alias = "myzlib"})
-add_requires("openssl 1.1.1-q", {configs = {shared = false, pic = true}, system = false, alias = "myopenssl"})
+--TODO:vs_runtime
+add_requires("zlib v1.2.10", {
+        system = false,
+        configs = {shared = false, pic = true},
+        alias = "myzlib"
+    }
+)
+
+
+-- "no_threads": [True, False],
+-- "no_zlib": [True, False],
+-- "no_asm": [True, False],
+-- "enable_weak_ssl_ciphers": [True, False],
+-- "386": [True, False],
+-- "no_stdio": [True, False],
+-- "no_tests": [True, False],
+-- "no_sse2": [True, False],
+-- "no_bf": [True, False],
+-- "no_cast": [True, False],
+-- "no_des": [True, False],
+-- "no_dh": [True, False],
+-- "no_dsa": [True, False],
+-- "no_hmac": [True, False],
+-- "no_md2": [True, False],
+-- "no_md5": [True, False],
+-- "no_mdc2": [True, False],
+-- "no_rc2": [True, False],
+-- "no_rc4": [True, False],
+-- "no_rc5": [True, False],
+-- "no_rsa": [True, False],
+-- "no_sha": [True, False],
+-- "no_async": [True, False],
+-- "no_dso": [True, False],
+-- "no_aria": [True, False],
+-- "no_blake2": [True, False],
+-- "no_camellia": [True, False],
+-- "no_chacha": [True, False],
+-- "no_cms": [True, False],
+-- "no_comp": [True, False],
+-- "no_ct": [True, False],
+-- "no_deprecated": [True, False],
+-- "no_dgram": [True, False],
+-- "no_engine": [True, False],
+-- "no_filenames": [True, False],
+-- "no_gost": [True, False],
+-- "no_idea": [True, False],
+-- "no_md4": [True, False],
+-- "no_ocsp": [True, False],
+-- "no_pinshared": [True, False],
+-- "no_rmd160": [True, False],
+-- "no_sm2": [True, False],
+-- "no_sm3": [True, False],
+-- "no_sm4": [True, False],
+-- "no_srp": [True, False],
+-- "no_srtp": [True, False],
+-- "no_ssl": [True, False],
+-- "no_ts": [True, False],
+-- "no_whirlpool": [True, False],
+-- "no_ec": [True, False],
+-- "no_ecdh": [True, False],
+-- "no_ecdsa": [True, False],
+-- "no_rfc3779": [True, False],
+-- "no_seed": [True, False],
+-- "no_sock": [True, False],
+-- "no_ssl3": [True, False],
+-- "no_tls1": [True, False],
+-- "capieng_dialog": [True, False],
+-- "enable_capieng": [True, False]
+
+add_requires("openssl 1.1.1-q", {
+        system = false, 
+        configs = {shared = false, pic = true,
+            options = { 
+                no_asm = true, no_tests = true
+            },
+            zlib = {
+                buildhash = '',
+                version = ''
+
+            }
+        }, 
+        alias = "myopenssl"
+    }
+)
 
 --add_requires("libcurl 7.82.0", {configs = {shared = false, pic = true, zlib = true}, system = false, alias = "libcurl"})
 
 target("test")
     set_kind("binary")
     add_files("src/*.c")
-    add_packages("myzlib", "myopenssl")--, "libcurl")
+    add_packages("myopenssl")
 
 
 
