@@ -1,5 +1,10 @@
-add_rules("mode.debug", "mode.release")
+add_rules("mode.debug", "mode.release", "mode.releasedbg")
+
 set_policy("package.install_always", true)
+
+--TODO:定义到其他地方
+local zlib_version = "v1.2.10"
+local zlib_buildhash = "54e8ae08e1274b7daba559de532d08dd"
 
 package("zlib")
 
@@ -11,7 +16,8 @@ package("zlib")
     add_versions("v1.2.10", "42cd7b2bdaf1c4570e0877e61f2fdc0bce8019492431d054d3d86925e5058dc5")
     add_versions("v1.2.11", "629380c90a77b964d896ed37163f5c3a34f6e6d897311f1df2a7016355c45eff")
     add_versions("v1.2.12", "d8688496ea40fb61787500e863cc63c9afcbc524468cedeb478068924eb54932")
-
+    -- 有需要的话设置出来,但暂时应该不需要
+    --set_installdir("/home/kench/workspace/mine/xrepo-test/")
     if is_plat("mingw") and is_subhost("msys") then
         add_extsources("pacman::zlib")
     elseif is_plat("linux") then
@@ -68,7 +74,6 @@ package("zlib")
             configs.cxflags = "-fPIC"
         end
         import("package.tools.xmake").install(package, configs)
-
     end)
 
     on_test(function (package)
@@ -78,17 +83,19 @@ package("zlib")
 package_end()
 
 package("openssl")
-    set_policy("package.install_always", true)
-    -- add_urls("https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_$(version).zip", {version = function (version)
-    --     return version:gsub("^(%d+)%.(%d+)%.(%d+)-?(%a*)$", "%1_%2_%3%4")
-    -- end, excludes = "*/fuzz/*"})
+
+    add_urls("https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_$(version).zip", {version = function (version)
+        return version:gsub("^(%d+)%.(%d+)%.(%d+)-?(%a*)$", "%1_%2_%3%4")
+    end, excludes = "*/fuzz/*"})
     add_versions("1.1.1-q", "df86e6adcff1c91a85cef139dd061ea40b7e49005e8be16522cf4864bfcf5eb8")
-    -- add_patches("1.1.1-q", path.join(os.scriptdir(), "patches", "1.1.1q.diff"), "cfe6929f9db2719e695be0b61f8c38fe8132544c5c58ca8d07383bfa6c675b7b")
-    set_sourcedir("/home/rhel/.xmake/cache/packages/2211/o/openssl/1.1.1-q")
+    add_patches("1.1.1-q", path.join(os.scriptdir(), "patches", "1.1.1q.diff"), "cfe6929f9db2719e695be0b61f8c38fe8132544c5c58ca8d07383bfa6c675b7b")
+
     on_fetch("fetch")
 
     -- 设置基础数据类型
     add_configs("options", {description = "option features switch", default = {}, type = "table"})
+    -- 设置zlib相关
+    add_configs("zlib", {description = "zlib configuration", default = {}, type = "table"})
 
 
     on_load(function (package)
@@ -117,7 +124,6 @@ package("openssl")
 
 
     on_install("linux", "macosx", "bsd", function (package, opts)
-        local option_features = package:config("options")
         local nilval
         -- https://wiki.openssl.org/index.php/Compilation_and_Installation#PREFIX_and_OPENSSLDIR
         local buildenvs = import("package.tools.autoconf").buildenvs(package)
@@ -128,28 +134,26 @@ package("openssl")
             table.insert(configs, "--debug")
         end
 
-        --设定其他fearture
+        -- 设定其他fearture
+        local option_features = package:config("options")
         if option_features then
             for k, v in pairs(option_features) do
-                --todo:判断type
                 if v then table.insert(configs, string.format("%s", string.gsub(k, "_", "-"))) end
             end
         end
-        --windows怎么拼接?
-        local packagep = path.join("~", ".xmake", "packages")
-        print("pckages")
-        print(packagep)
-        print(opts)
-        local deps_zlib = find_package("xmake::zlib", {
-                buildhash = "54e8ae08e1274b7daba559de532d08dd",
-                require_version = "v1.2.10", version = true,
-                packagedirs = {"/home/rhel/.xmake/packages"}            
-            }
-        )
-        -- 指定zlib
-        table.insert(configs, "--with-zlib-lib=" .. deps_zlib["linkdirs"][1])
-        --调试用
-        --print(configs .. nilval)
+        
+        -- 通过外部参数找到我们编译的zlib
+        local zlib_cfg = package:config("zlib")
+        if zlib_cfg then
+            local zlib_ctx = find_package("xmake::zlib", {
+                    buildhash = string.format("%s", zlib_cfg["buildhash"]),
+                    require_version = string.format("%s", zlib_cfg["version"]), version = true,
+                    packagedirs = {path.join("~", ".xmake", "packages")}            
+                }
+            )
+            -- 指定zlib
+            table.insert(configs, "--with-zlib-lib=" .. zlib_ctx["linkdirs"][1])
+        end
 
         os.vrunv("./config", configs, {envs = buildenvs})
         local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
@@ -168,14 +172,14 @@ package("openssl")
 package_end()
 
 --TODO:vs_runtime
-add_requires("zlib v1.2.10", {
+add_requires( string.format("zlib %s", zlib_version) , {
         system = false,
         configs = {shared = false, pic = true},
-        alias = "myzlib"
+        alias = "zlib"
     }
 )
 
-
+-- 支持裁剪
 -- "no_threads": [True, False],
 -- "no_zlib": [True, False],
 -- "no_asm": [True, False],
@@ -243,12 +247,11 @@ add_requires("openssl 1.1.1-q", {
                 no_asm = true, no_tests = true
             },
             zlib = {
-                buildhash = '',
-                version = ''
-
+                buildhash = zlib_buildhash,
+                version = zlib_version
             }
         }, 
-        alias = "myopenssl"
+        alias = "openssl"
     }
 )
 
@@ -257,10 +260,19 @@ add_requires("openssl 1.1.1-q", {
 target("test")
     set_kind("binary")
     add_files("src/*.c")
-    add_packages("myopenssl")
+    add_packages("zlib", "openssl")
+    -- set_installdir("install")
+    -- after_build(function(target)
+    --     import("target.action.install")(target)
+    -- end)
 
 
-
+    -- TODO:直接hook uninstall 清除 package 缓存
+    on_uninstall(function(target)
+        print(target:get("packages"))
+        --os.tryrm()
+    end)
+package_end()
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
