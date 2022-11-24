@@ -1,5 +1,15 @@
 add_rules("mode.debug", "mode.release")
 
+-- if is_os("windows") then
+--     if(is_mode("release")) then
+--         set_config("vs_runtime", "MD")
+--     else
+--         set_config("vs_runtime", "MDd")
+--     end
+-- else
+--     add_cxflags("-MD")
+-- end
+
 package("zlib")
     set_homepage("http://www.zlib.net")
     set_description("A Massively Spiffy Yet Delicately Unobtrusive Compression Library")
@@ -19,6 +29,46 @@ package("zlib")
     end
 
     on_install(function (package)
+        io.writefile("xmake.lua", [[
+            includes("check_cincludes.lua")
+            add_rules("mode.debug", "mode.release")
+            target("zlib")
+                set_kind("$(kind)")
+                if not is_plat("windows") then
+                    set_basename("z")
+                end
+                add_files("adler32.c")
+                add_files("compress.c")
+                add_files("crc32.c")
+                add_files("deflate.c")
+                add_files("gzclose.c")
+                add_files("gzlib.c")
+                add_files("gzread.c")
+                add_files("gzwrite.c")
+                add_files("inflate.c")
+                add_files("infback.c")
+                add_files("inftrees.c")
+                add_files("inffast.c")
+                add_files("trees.c")
+                add_files("uncompr.c")
+                add_files("zutil.c")
+                add_headerfiles("zlib.h", "zconf.h")
+                check_cincludes("Z_HAVE_UNISTD_H", "unistd.h")
+                check_cincludes("HAVE_SYS_TYPES_H", "sys/types.h")
+                check_cincludes("HAVE_STDINT_H", "stdint.h")
+                check_cincludes("HAVE_STDDEF_H", "stddef.h")
+                if is_plat("windows") then
+                    add_defines("_CRT_SECURE_NO_DEPRECATE")
+                    add_defines("_CRT_NONSTDC_NO_DEPRECATE")
+                    if is_kind("shared") then
+                        add_files("win32/zlib1.rc")
+                        add_defines("ZLIB_DLL")
+                    end
+                else
+                    add_defines("ZEXPORT=__attribute__((visibility(\"default\")))")
+                    add_defines("_LARGEFILE64_SOURCE=1")
+                end
+        ]])
         local configs = {}
         if package:config("shared") then
             configs.kind = "shared"
@@ -33,145 +83,161 @@ package("zlib")
     end)
 package_end()
 
+package("openssl")
 
-package("libcurl")
+    set_homepage("https://www.openssl.org/")
+    set_description("A robust, commercial-grade, and full-featured toolkit for TLS and SSL.")
 
-    set_homepage("https://curl.haxx.se/")
-    set_description("The multiprotocol file transfer library.")
-    set_license("MIT")
+    add_urls("https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_$(version).zip", {version = function (version)
+        return version:gsub("^(%d+)%.(%d+)%.(%d+)-?(%a*)$", "%1_%2_%3%4")
+    end, excludes = "*/fuzz/*"})
+    add_versions("1.1.1-q", "df86e6adcff1c91a85cef139dd061ea40b7e49005e8be16522cf4864bfcf5eb8")
+    add_patches("1.1.1-q", path.join(os.scriptdir(), "patches", "1.1.1q.diff"), "cfe6929f9db2719e695be0b61f8c38fe8132544c5c58ca8d07383bfa6c675b7b")
 
-    set_urls("https://curl.haxx.se/download/curl-$(version).tar.bz2",
-             "http://curl.mirror.anstey.ca/curl-$(version).tar.bz2")
-    add_urls("https://github.com/curl/curl/releases/download/curl-$(version).tar.bz2",
-             {version = function (version) return (version:gsub("%.", "_")) .. "/curl-" .. version end})
-    add_versions("7.82.0", "46d9a0400a33408fd992770b04a44a7434b3036f2e8089ac28b57573d59d371f")
-
-    if is_plat("macosx", "iphoneos") then
-        add_frameworks("Security", "CoreFoundation", "SystemConfiguration")
-    elseif is_plat("linux") then
-        add_syslinks("pthread")
-    elseif is_plat("windows", "mingw") then
-        add_deps("cmake")
-        add_syslinks("advapi32", "crypt32", "wldap32", "winmm", "ws2_32", "user32")
-    end
-
-    add_configs("cares",    {description = "Enable c-ares support.", default = false, type = "boolean"})
-    add_configs("openssl",  {description = "Enable OpenSSL for SSL/TLS.", default = is_plat("linux", "cross"), type = "boolean"})
-    add_configs("mbedtls",  {description = "Enable mbedTLS for SSL/TLS.", default = false, type = "boolean"})
-    add_configs("nghttp2",  {description = "Use Nghttp2 library.", default = false, type = "boolean"})
-    add_configs("openldap", {description = "Use OpenLDAP library.", default = false, type = "boolean"})
-    add_configs("libidn2",  {description = "Use Libidn2 for IDN support.", default = false, type = "boolean"})
-    add_configs("zlib",     {description = "Enable zlib support.", default = false, type = "boolean"})
-    add_configs("zstd",     {description = "Enable zstd support.", default = false, type = "boolean"})
-    add_configs("brotli",   {description = "Enable brotli support.", default = false, type = "boolean"})
-    add_configs("libssh2",  {description = "Use libSSH2 library.", default = false, type = "boolean"})
-
-    if not is_plat("windows", "mingw@windows") then
-        add_configs("libpsl",   {description = "Use libpsl for Public Suffix List.", default = false, type = "boolean"})
-    end
+    on_fetch("fetch")
 
     on_load(function (package)
-        if package:is_plat("windows", "mingw") then
-            if not package:config("shared") then
-                package:add("defines", "CURL_STATICLIB")
-            end
+        if package:is_plat("windows") and (not package.is_built or package:is_built()) then
+            package:add("deps", "nasm")
+            -- the perl executable found in GitForWindows will fail to build OpenSSL
+            -- see https://github.com/openssl/openssl/blob/master/NOTES-PERL.md#perl-on-windows
+            package:add("deps", "strawberry-perl", { system = false })
         end
-        local configdeps = {cares    = "c-ares",
-                            openssl  = "openssl",
-                            mbedtls  = "mbedtls",
-                            nghttp2  = "nghttp2",
-                            openldap = "openldap",
-                            libidn2  = "libidn2",
-                            libpsl   = "libpsl",
-                            zlib     = "zlib",
-                            zstd     = "zstd",
-                            brotli   = "brotli",
-                            libssh2  = "libssh2"}
-        local has_deps = false
-        for name, dep in pairs(configdeps) do
-            if package:config(name) then
-                package:add("deps", dep)
-                has_deps = true
-            end
-        end
-        if has_deps and package:is_plat("linux", "macosx") then
-            package:add("deps", "pkg-config")
-        end
-    end)
 
-    on_install("windows", "mingw", function (package)
-        local configs = {"-DBUILD_TESTING=OFF", "-DENABLE_MANUAL=OFF"}
-        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
-        table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
-        table.insert(configs, (package:version():ge("7.80") and "-DCURL_USE_SCHANNEL=ON" or "-DCMAKE_USE_SCHANNEL=ON"))
-        local version = package:version()
-        local configopts = {cares    = "ENABLE_ARES",
-                            openssl  = (version:ge("7.81") and "CURL_USE_OPENSSL" or "CMAKE_USE_OPENSSL"),
-                            mbedtls  = (version:ge("7.81") and "CURL_USE_MBEDTLS" or "CMAKE_USE_MBEDTLS"),
-                            nghttp2  = "USE_NGHTTP2",
-                            openldap = "CURL_USE_OPENLDAP",
-                            libidn2  = "USE_LIBIDN2",
-                            zlib     = "CURL_ZLIB",
-                            zstd     = "CURL_ZSTD",
-                            brotli   = "CURL_BROTLI",
-                            libssh2  = (version:ge("7.81") and "CURL_USE_LIBSSH2" or "CMAKE_USE_LIBSSH2")}
-        for name, opt in pairs(configopts) do
-            table.insert(configs, "-D" .. opt .. "=" .. (package:config(name) and "ON" or "OFF"))
-        end
+        -- @note we must use package:is_plat() instead of is_plat in description for supporting add_deps("openssl", {host = true}) in python
         if package:is_plat("windows") then
-            table.insert(configs, "-DCURL_STATIC_CRT=" .. (package:config("vs_runtime"):startswith("MT") and "ON" or "OFF"))
+            package:add("links", "libssl", "libcrypto")
+        else
+            package:add("links", "ssl", "crypto")
         end
-        if package:is_plat("mingw") and version:le("7.85.0") then
-            io.replace("src/CMakeLists.txt", 'COMMAND ${CMAKE_COMMAND} -E echo "/* built-in manual is disabled, blank function */" > tool_hugehelp.c', "", {plain = true})
+        if package:is_plat("windows", "mingw") then
+            package:add("syslinks", "ws2_32", "user32", "crypt32", "advapi32")
+        elseif package:is_plat("linux", "cross") then
+            package:add("syslinks", "pthread", "dl")
         end
-        import("package.tools.cmake").install(package, configs)
+        if package:is_plat("linux") then
+            package:add("extsources", "apt::libssl-dev")
+        end
     end)
 
-    on_install("macosx", "linux", "iphoneos", "cross", function (package)
-        local configs = {"--disable-silent-rules",
-                         "--disable-dependency-tracking",
-                         "--without-hyper",
-                         "--without-libgsasl",
-                         "--without-librtmp",
-                         "--without-quiche",
-                         "--without-ngtcp2",
-                         "--without-nghttp3"}
-        table.insert(configs, "--enable-shared=" .. (package:config("shared") and "yes" or "no"))
-        table.insert(configs, "--enable-static=" .. (package:config("shared") and "no" or "yes"))
-        if package:debug() then
-            table.insert(configs, "--enable-debug")
+    on_install("windows", function (package)
+        local configs = {"Configure"}
+        local target
+        if package:is_arch("x86", "i386") then
+            target = "VC-WIN32"
+        elseif package:is_arch("arm64") then
+            target = "VC-WIN64-ARM"
+        elseif package:is_arch("arm.*") then
+            target = "VC-WIN32-ARM"
+        else
+            target = "VC-WIN64A"
         end
-        if package:is_plat("macosx", "iphoneos") then
-            table.insert(configs, (package:version():ge("7.77") and "--with-secure-transport" or "--with-darwinssl"))
+        table.insert(configs, target)
+        table.insert(configs, package:config("shared") and "shared" or "no-shared")
+        table.insert(configs, "--prefix=" .. package:installdir())
+        table.insert(configs, "--openssldir=" .. package:installdir())
+        os.vrunv("perl", configs)
+        import("package.tools.nmake").install(package)
+    end)
+
+    on_install("mingw", function (package)
+        local configs = {"Configure", "no-tests"}
+        table.insert(configs, package:is_arch("i386", "x86") and "mingw" or "mingw64")
+        table.insert(configs, package:config("shared") and "shared" or "no-shared")
+        local installdir = package:installdir()
+        -- Use MSYS2 paths instead of Windows paths
+        if is_subhost("msys") then
+            installdir = installdir:gsub("(%a):[/\\](.+)", "/%1/%2"):gsub("\\", "/")
         end
-        for _, name in ipairs({"openssl", "mbedtls", "zlib", "brotli", "zstd", "libssh2", "libidn2", "libpsl", "nghttp2"}) do
-            table.insert(configs, package:config(name) and "--with-" .. name or "--without-" .. name)
-        end
-        table.insert(configs, package:config("cares") and "--enable-ares" or "--disable-ares")
-        table.insert(configs, package:config("openldap") and "--enable-ldap" or "--disable-ldap")
-        if package:is_plat("macosx") then
-            local cares = package:dep("c-ares")
-            if cares and not cares:config("shared") then
-                -- we need fix missing `-lresolv` when checking c-ares
-                io.replace("./configure", "PKGCONFIG --libs-only-l libcares", "PKGCONFIG --libs-only-l --static libcares", {plain = true})
+        table.insert(configs, "--prefix=" .. installdir)
+        table.insert(configs, "--openssldir=" .. installdir)
+        local buildenvs = import("package.tools.autoconf").buildenvs(package)
+        buildenvs.RC = package:build_getenv("mrc")
+        if is_subhost("msys") then
+            local rc = buildenvs.RC
+            if rc then
+                rc = rc:gsub("(%a):[/\\](.+)", "/%1/%2"):gsub("\\", "/")
+                buildenvs.RC = rc
             end
         end
-        import("package.tools.autoconf").install(package, configs)
+        -- fix 'cp: directory fuzz does not exist'
+        if package:config("shared") then
+            os.mkdir("fuzz")
+        end
+        os.vrunv("perl", configs, {envs = buildenvs})
+        import("package.tools.make").build(package)
+        import("package.tools.make").make(package, {"install_sw"})
+    end)
+
+    on_install("linux", "macosx", "bsd", function (package)
+        -- https://wiki.openssl.org/index.php/Compilation_and_Installation#PREFIX_and_OPENSSLDIR
+        local buildenvs = import("package.tools.autoconf").buildenvs(package)
+        local configs = {"--openssldir=" .. package:installdir(),
+                         "--prefix=" .. package:installdir()}
+        table.insert(configs, package:config("shared") and "shared" or "no-shared")
+        if package:debug() then
+            table.insert(configs, "--debug")
+        end
+        os.vrunv("./config", configs, {envs = buildenvs})
+        local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
+        import("package.tools.make").build(package, makeconfigs)
+        import("package.tools.make").make(package, {"install_sw"})
+        if package:config("shared") then
+            os.tryrm(path.join(package:installdir("lib"), "*.a"))
+        end
+    end)
+
+    on_install("cross", "android", function (package)
+
+        local target_arch = "generic32"
+        if package:is_arch("x86_64") then
+            target_arch = "x86_64"
+        elseif package:is_arch("i386", "x86") then
+            target_arch = "x86"
+        elseif package:is_arch("arm64", "arm64-v8a") then
+            target_arch = "aarch64"
+        elseif package:is_arch("arm.*") then
+            target_arch = "armv4"
+        elseif package:is_arch(".*64") then
+            target_arch = "generic64"
+        end
+
+        local target_plat = "linux"
+        if package:is_plat("macosx") then
+            target_plat = "darwin64"
+            target_arch = "x86_64-cc"
+        end
+
+        local target = target_plat .. "-" .. target_arch
+        local configs = {target,
+                         "-DOPENSSL_NO_HEARTBEATS",
+                         "no-shared",
+                         "no-threads",
+                         "--openssldir=" .. package:installdir(),
+                         "--prefix=" .. package:installdir()}
+        local buildenvs = import("package.tools.autoconf").buildenvs(package)
+        os.vrunv("./Configure", configs, {envs = buildenvs})
+        local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
+        import("package.tools.make").build(package, makeconfigs)
+        import("package.tools.make").make(package, {"install_sw"})
     end)
 
     on_test(function (package)
-        assert(package:has_cfuncs("curl_version", {includes = "curl/curl.h"}))
+        assert(package:has_cfuncs("SSL_new", {includes = "openssl/ssl.h"}))
     end)
 package_end()
+
 --
 --{configs = {toolchains = "gcc-11"}})
-add_requires("zlib v1.2.10", {configs = {shared = false, pic = true}, system = false, alias = "zlib"})
-add_requires("libcurl 7.82.0", {configs = {shared = false, pic = true, zlib = true}, system = false, alias = "libcurl"})
+add_requires("zlib v1.2.10", {configs = {shared = false, pic = true}, system = false, alias = "myzlib"})
+add_requires("openssl 1.1.1-q", {configs = {shared = false, pic = true}, system = false, alias = "myopenssl"})
+
+--add_requires("libcurl 7.82.0", {configs = {shared = false, pic = true, zlib = true}, system = false, alias = "libcurl"})
 
 target("test")
     set_kind("binary")
     add_files("src/*.c")
-    add_packages("zlib", "libcurl")
+    add_packages("myzlib", "myopenssl")--, "libcurl")
 
 
 
