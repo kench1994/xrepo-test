@@ -66,9 +66,12 @@ package("libcurl")
                 has_deps = true
             end
         end
-        if has_deps and package:is_plat("linux", "macosx") then
-            package:add("deps", "pkg-config")
-        end
+
+        -- pkg-config 这个插件好像会自动寻找依赖
+        -- 目前希望完全有我们自己掌控
+        -- if has_deps and package:is_plat("linux", "macosx") then
+        --     package:add("deps", "pkg-config")
+        -- end
     end)
 
     on_install("windows", "mingw", function (package)
