@@ -61,7 +61,7 @@ on_install("linux", "macosx", "bsd", function (package, opts)
     
     -- 通过外部参数找到我们编译的zlib
     local zlib_cfg = package:config("zlib")
-    -- 强制使用 zlib,以避免编译未如同预期
+    -- 强制使用 zlib,以避免编译指令未如预期
     local zlib_ctx = find_package("xmake::zlib", {
             buildhash = string.format("%s", zlib_cfg["buildhash"]),
             require_version = string.format("%s", zlib_cfg["version"]), version = true,
@@ -70,12 +70,14 @@ on_install("linux", "macosx", "bsd", function (package, opts)
     )
     -- 指定zlib
     table.insert(configs, "--with-zlib-lib=" .. zlib_ctx["linkdirs"][1])
-    print("envs")
-    print(buildenvs.CFLAGS)
-    local nilval
-    print(buildenvs.CFLAGS .. nilval)
+    table.insert(configs, "--with-zlib-include=" .. zlib_ctx["includedirs"][1])
+
+    -- TODO: pass compile flags
     os.vrunv("./config", configs, {envs = buildenvs})
-    local makeconfigs = {CFLAGS = buildenvs.CFLAGS, ASFLAGS = buildenvs.ASFLAGS}
+    local makeconfigs = {
+        CFLAGS = string.format("-fvisibility=hidden %s", buildenvs.CFLAGS),
+        ASFLAGS = buildenvs.ASFLAGS
+    }
     import("package.tools.make").build(package, makeconfigs)
     import("package.tools.make").make(package, {"install_sw"})
     if package:config("shared") then

@@ -1,25 +1,28 @@
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
-
 set_policy("package.install_always", true)
-
 -- 添加本地 package 描述
-add_subdirs("packages/zlib", "packages/openssl")
+add_subdirs("packages/zlib", "packages/openssl", "packages/libcurl")
 
 --TODO:定义到其他地方
 local zlib_version = "v1.2.10"
 local zlib_buildhash = "54e8ae08e1274b7daba559de532d08dd"
+local openssl_version = "1.1.1-q"
+local openssl_buildhash = "269989207fbc4ebeb67d0b2bdb8f86ba"
+
 
 --TODO:vs_runtime
 add_requires( string.format("zlib %s", zlib_version) , {
-        system = false,
-        configs = {shared = false, pic = true},
-        alias = "zlib"
+        system = false, alias = "zlib",
+        configs = {shared = false, pic = true}
     }
 )
 
-add_requires("openssl 1.1.1-q", {
-        system = false, 
+add_requires( string.format("openssl %s", openssl_version), {
+        system = false, alias = "openssl",
         configs = {shared = false, pic = true,
+            -- 这样的写法有待商议, 使用 options 主要是懒得加太多条目
+            -- 其实可以直接写到 install 脚本，但是跨平台可能比较差
+            -- 或者规范点写，就得加很多条目
             options = { 
                 no_asm = true, no_tests = true
             },
@@ -27,12 +30,22 @@ add_requires("openssl 1.1.1-q", {
                 buildhash = zlib_buildhash,
                 version = zlib_version
             }
-        }, 
-        alias = "openssl"
+        }
     }
 )
 
---add_requires("libcurl 7.82.0", {configs = {shared = false, pic = true, zlib = true}, system = false, alias = "libcurl"})
+add_requires("libcurl 7.82.0", { 
+        system = false, alias = "libcurl",
+        configs = {shared = false, pic = true, 
+            zlib = true,
+            zlib_ver = zlib_version,
+            zlib_hash = zlib_buildhash,
+            openssl = true,
+            openssl_ver = openssl_version,
+            openssl_hash = openssl_buildhash,
+        }
+    }
+)
 
 target("test")
     set_kind("binary")
@@ -44,14 +57,14 @@ target("test")
     -- end)
 
 
-    -- TODO:直接hook uninstall 清除 package 缓存
+    -- 直接hook uninstall 清除 package 缓存
     on_uninstall(function(target)
         local deps_dpkgs = target:get("packages")
         for i, v in pairs(deps_dpkgs) do  
             local path = path.join("~", ".xmake", "packages", string.sub(v, 1, 1), v)
             cprint("${bright blue} try removing %s", path)
             os.tryrm(path)
-            os.exec("xmake clean --all")
+            --os.exec("xmake clean --all")
         end          
     end)
 target_end()
