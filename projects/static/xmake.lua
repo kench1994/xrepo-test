@@ -7,14 +7,14 @@ local openssl_buildhash = "269989207fbc4ebeb67d0b2bdb8f86ba"
 local libcurl_version = "7.82.0"
 
 add_requires( string.format("zlib %s", zlib_version) , {
-        system = false, alias = "zlib",
+        system = false, alias = "zlib", vs_runtime = "MD",
         configs = {shared = false, pic = true}
     }
 )
 
 add_requires( string.format("openssl %s", openssl_version), {
         system = false, alias = "openssl",
-        configs = {shared = false, pic = true,
+        configs = {shared = false, pic = true, vs_runtime = "MD",
             -- 这样的写法有待商议, 使用 options 主要是懒得加太多条目
             -- 其实可以直接写到 install 脚本，但是跨平台可能比较差
             -- 或者规范点写，就得加很多条目
@@ -31,7 +31,7 @@ add_requires( string.format("openssl %s", openssl_version), {
 
 add_requires( string.format("libcurl %s", libcurl_version), {
         system = false, alias = "libcurl",
-        configs = {shared = false, pic = true, 
+        configs = {shared = false, pic = true, vs_runtime = "MD",
             zlib = true,
             zlib_ver = zlib_version,
             zlib_hash = zlib_buildhash,
