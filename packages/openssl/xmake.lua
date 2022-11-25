@@ -61,16 +61,18 @@ on_install("linux", "macosx", "bsd", function (package, opts)
     
     -- 通过外部参数找到我们编译的zlib
     local zlib_cfg = package:config("zlib")
-    -- 强制使用 zlib,以避免编译指令未如预期
-    local zlib_ctx = find_package("xmake::zlib", {
-            buildhash = string.format("%s", zlib_cfg["buildhash"]),
-            require_version = string.format("%s", zlib_cfg["version"]), version = true,
-            packagedirs = {path.join("~", ".xmake", "packages")}            
-        }
-    )
+    -- -- 强制使用 zlib,以避免编译指令未如预期
+    -- local zlib_ctx = find_package("xmake::zlib", {
+    --         buildhash = string.format("%s", zlib_cfg["buildhash"]),
+    --         require_version = string.format("%s", zlib_cfg["version"]), version = true,
+    --         packagedirs = {path.join("~", ".xmake", "packages")}            
+    --     }
+    -- )
+    local zlib_path = path.join("~", ".xmake", "packages", "z", "zlib", zlib_cfg["version"], zlib_cfg["buildhash"])
+
     -- 指定zlib
-    table.insert(configs, "--with-zlib-lib=" .. zlib_ctx["linkdirs"][1])
-    table.insert(configs, "--with-zlib-include=" .. zlib_ctx["includedirs"][1])
+    table.insert(configs, "--with-zlib-lib=" .. zlib_path .. "/lib")
+    table.insert(configs, "--with-zlib-include=" .. zlib_path .. "/include")
 
     -- TODO: pass compile flags
     os.vrunv("./config", configs, {envs = buildenvs})

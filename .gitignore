@@ -2,7 +2,7 @@
 .xmake/
 .vscode/
 build/
-
+publish/
 # MacOS Cache
 .DS_Store
 

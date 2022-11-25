@@ -1,3 +1,16 @@
+目前项目结构
+├── global.lua      一些全局的设置，比如内置模式、packages
+├── packages        packages 描述
+│   ├── libcurl
+│   ├── openssl
+│   └── zlib
+├── projects        项目，目前只有shared、static表示全动态、全静态编译的库
+│   ├── shared
+│   └── static
+├── readme.txt
+└── src
+    └── main.c      Hello World! 只是用来承接库的引用，可以加入自己的测试用例
+
 Q:为什么尝试使用 xmake 来描述库构建过程
 A:1.虽然我们目前内部库发布没有太多平台、架构、rel/dbg组合，但是通过代码流程化描述库构建过程一是可以标准化该发布过程，
     避免全手工操作的繁琐和犯错。并更加便捷的切换编译链工具、rel/dbg 等等特性，更快捷的发布。

@@ -48,58 +48,34 @@ package("libcurl")
                 package:add("defines", "CURL_STATICLIB")
             end
         end
-        local configdeps = {cares    = "c-ares",
-                            openssl  = "openssl",
-                            mbedtls  = "mbedtls",
-                            nghttp2  = "nghttp2",
-                            openldap = "openldap",
-                            libidn2  = "libidn2",
-                            libpsl   = "libpsl",
-                            zlib     = "zlib",
-                            zstd     = "zstd",
-                            brotli   = "brotli",
-                            libssh2  = "libssh2"}
-        local has_deps = false
-        for name, dep in pairs(configdeps) do
-            if package:config(name) then
-                package:add("deps", dep)
-                has_deps = true
-            end
-        end
+
+        package:add("links", "ssl")
+        package:add("links", "crypto")
+        package:add("links", "zlib")
+        -- local configdeps = {cares    = "c-ares",
+        --                     openssl  = "openssl",
+        --                     mbedtls  = "mbedtls",
+        --                     nghttp2  = "nghttp2",
+        --                     openldap = "openldap",
+        --                     libidn2  = "libidn2",
+        --                     libpsl   = "libpsl",
+        --                     zlib     = "zlib",
+        --                     zstd     = "zstd",
+        --                     brotli   = "brotli",
+        --                     libssh2  = "libssh2"}
+        -- local has_deps = false
+        -- for name, dep in pairs(configdeps) do
+        --     if package:config(name) then
+        --         package:add("deps", dep)
+        --         has_deps = true
+        --     end
+        -- end
 
         -- pkg-config 这个插件好像会自动寻找依赖
         -- 目前希望完全有我们自己掌控
         -- if has_deps and package:is_plat("linux", "macosx") then
         --     package:add("deps", "pkg-config")
         -- end
-    end)
-
-    on_install("windows", "mingw", function (package)
-        local configs = {"-DBUILD_TESTING=OFF", "-DENABLE_MANUAL=OFF"}
-        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
-        table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
-        table.insert(configs, (package:version():ge("7.80") and "-DCURL_USE_SCHANNEL=ON" or "-DCMAKE_USE_SCHANNEL=ON"))
-        local version = package:version()
-        local configopts = {cares    = "ENABLE_ARES",
-                            openssl  = (version:ge("7.81") and "CURL_USE_OPENSSL" or "CMAKE_USE_OPENSSL"),
-                            mbedtls  = (version:ge("7.81") and "CURL_USE_MBEDTLS" or "CMAKE_USE_MBEDTLS"),
-                            nghttp2  = "USE_NGHTTP2",
-                            openldap = "CURL_USE_OPENLDAP",
-                            libidn2  = "USE_LIBIDN2",
-                            zlib     = "CURL_ZLIB",
-                            zstd     = "CURL_ZSTD",
-                            brotli   = "CURL_BROTLI",
-                            libssh2  = (version:ge("7.81") and "CURL_USE_LIBSSH2" or "CMAKE_USE_LIBSSH2")}
-        for name, opt in pairs(configopts) do
-            table.insert(configs, "-D" .. opt .. "=" .. (package:config(name) and "ON" or "OFF"))
-        end
-        if package:is_plat("windows") then
-            table.insert(configs, "-DCURL_STATIC_CRT=" .. (package:config("vs_runtime"):startswith("MT") and "ON" or "OFF"))
-        end
-        if package:is_plat("mingw") and version:le("7.85.0") then
-            io.replace("src/CMakeLists.txt", 'COMMAND ${CMAKE_COMMAND} -E echo "/* built-in manual is disabled, blank function */" > tool_hugehelp.c', "", {plain = true})
-        end
-        import("package.tools.cmake").install(package, configs)
     end)
 
     on_install("macosx", "linux", "iphoneos", "cross", function (package)
@@ -119,20 +95,18 @@ package("libcurl")
         if package:is_plat("macosx", "iphoneos") then
             table.insert(configs, (package:version():ge("7.77") and "--with-secure-transport" or "--with-darwinssl"))
         end
-        for _, name in ipairs({"openssl", "mbedtls", "zlib", "brotli", "zstd", "libssh2", "libidn2", "libpsl", "nghttp2"}) do
-            table.insert(configs, package:config(name) and "--with-" .. name or "--without-" .. name)
-        end
 
-        table.insert(configs, "--with-ssl=" .. 
+        table.insert(configs, "--with-openssl=" .. 
             path.join("~", ".xmake", "packages", "o", "openssl", package:config("openssl_ver"), package:config("openssl_hash"))
         )
 
         table.insert(configs, "--with-zlib=" .. 
             path.join("~", ".xmake", "packages", "z", "zlib", package:config("zlib_ver"), package:config("zlib_hash"))
         )
-
+        
         table.insert(configs, package:config("cares") and "--enable-ares" or "--disable-ares")
         table.insert(configs, package:config("openldap") and "--enable-ldap" or "--disable-ldap")
+
         if package:is_plat("macosx") then
             local cares = package:dep("c-ares")
             if cares and not cares:config("shared") then

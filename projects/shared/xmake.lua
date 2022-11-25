@@ -1,14 +1,14 @@
 includes("../../global.lua")
 
 local zlib_version = "v1.2.10"
-local zlib_buildhash = "39bc6b93326149baad8a4ec21245c122"
+local zlib_buildhash = "48a5a0d7c7a8411682afc38ed73edad3"
 local openssl_version = "1.1.1-q"
-local openssl_buildhash = "9a19735311074bffa2bd79a235ae479b"
+local openssl_buildhash = "d554d405e3ef4fc18d27c11fa588783e"
 local libcurl_version = "7.82.0"
 
 add_requires( string.format("zlib %s", zlib_version) , {
-        system = false, alias = "zlib", vs_runtime = "MD",
-        configs = {shared = true, pic = true}
+        system = false, alias = "zlib",
+        configs = {shared = true, pic = true, vs_runtime = "MD"}
     }
 )
 
@@ -43,11 +43,11 @@ add_requires( string.format("libcurl %s", libcurl_version), {
 )
 
 target("shared")
-    set_kind("phony")
-    --add_files("../../src/*.c")
+    set_kind("binary")
+    add_files("../../src/*.c")
     -- 主要为了 hook install、uninstall 动作
     add_packages(
-        --"libcurl", 
+        "libcurl", 
         "zlib",
         "openssl"
     )
@@ -55,7 +55,7 @@ target("shared")
     --     import("target.action.install")(target)
     -- end)
 
-    -- set_installdir("publish")
+    set_installdir("publish")
     -- on_install(function(target)
 
     -- end)
