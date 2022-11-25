@@ -75,7 +75,7 @@ on_install("linux", "macosx", "bsd", function (package, opts)
     -- TODO: pass compile flags
     os.vrunv("./config", configs, {envs = buildenvs})
     local makeconfigs = {
-        CFLAGS = string.format("-fvisibility=hidden %s", buildenvs.CFLAGS),
+        CFLAGS = buildenvs.CFLAGS, --string.format("-fvisibility=hidden %s", 
         ASFLAGS = buildenvs.ASFLAGS
     }
     import("package.tools.make").build(package, makeconfigs)

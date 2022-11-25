@@ -6,8 +6,7 @@ package("zlib")
     add_urls("https://github.com/madler/zlib/archive/$(version).tar.gz",
              "https://github.com/madler/zlib.git")
     add_versions("v1.2.10", "42cd7b2bdaf1c4570e0877e61f2fdc0bce8019492431d054d3d86925e5058dc5")
-    -- 有需要的话设置出来,但暂时应该不需要
-    --set_installdir("/home/kench/workspace/mine/xrepo-test/")
+
     if is_plat("mingw") and is_subhost("msys") then
         add_extsources("pacman::zlib")
     elseif is_plat("linux") then
@@ -41,7 +40,7 @@ package("zlib")
                 add_files("uncompr.c")
                 add_files("zutil.c")
                 add_headerfiles("zlib.h", "zconf.h")
-                add_cxflags("-fvisibility=hidden")
+                -- add_cxflags("-fvisibility=hidden")
                 check_cincludes("Z_HAVE_UNISTD_H", "unistd.h")
                 check_cincludes("HAVE_SYS_TYPES_H", "sys/types.h")
                 check_cincludes("HAVE_STDINT_H", "stdint.h")
