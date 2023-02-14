@@ -42,8 +42,16 @@ add_requires( string.format("libcurl %s", libcurl_version), {
     }
 )
 
+target("predeps1")
+    set_kind("binary")
+    add_files("../../src/*.c")
+    add_packages("zlib")
+    set_installdir("$(projectdir)/publish/")
+target_end()
+
 target("test")
     set_kind("binary")
+    add_deps("predeps1")
     add_files("../../src/*.c")
     -- 主要为了 hook install、uninstall 动作
     add_packages("libcurl", "openssl", "zlib")
