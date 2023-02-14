@@ -12,13 +12,6 @@ add_requires( string.format("zlib %s", zlib_version) , {
     }
 )
 
-target("predeps1")
-    set_kind("binary")
-    add_files("../../src/*.c")
-    add_packages("zlib")
-    set_installdir("$(projectdir)/publish/")
-target_end()
-
 add_requires( string.format("openssl %s", openssl_version), {
         system = false, alias = "openssl",
         configs = {shared = false, pic = true, vs_runtime = "MD",
@@ -53,10 +46,9 @@ add_requires( string.format("libcurl %s", libcurl_version), {
 
 target("test")
     set_kind("binary")
-    add_deps("predeps1")
     add_files("../../src/*.c")
     -- 主要为了 hook install、uninstall 动作
-    add_packages("libcurl", "openssl", "zlib")
+    add_packages("zlib", "libcurl", "openssl")
 
     -- after_build(function(target)
     --     import("target.action.install")(target)
