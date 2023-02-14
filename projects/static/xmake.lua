@@ -12,6 +12,13 @@ add_requires( string.format("zlib %s", zlib_version) , {
     }
 )
 
+target("predeps1")
+    set_kind("binary")
+    add_files("../../src/*.c")
+    add_packages("zlib")
+    set_installdir("$(projectdir)/publish/")
+target_end()
+
 add_requires( string.format("openssl %s", openssl_version), {
         system = false, alias = "openssl",
         configs = {shared = false, pic = true, vs_runtime = "MD",
@@ -42,12 +49,7 @@ add_requires( string.format("libcurl %s", libcurl_version), {
     }
 )
 
-target("predeps1")
-    set_kind("binary")
-    add_files("../../src/*.c")
-    add_packages("zlib")
-    set_installdir("$(projectdir)/publish/")
-target_end()
+
 
 target("test")
     set_kind("binary")
