@@ -1,3 +1,4 @@
+includes("../openssl")
 includes(path.join(os.scriptdir(), "versions.lua"))
 
 package("libcurl")
@@ -11,6 +12,8 @@ package("libcurl")
     add_urls("https://github.com/curl/curl/releases/download/curl-$(version).tar.bz2",
              {version = function (version) return (version:gsub("%.", "_")) .. "/curl-" .. version end})
     add_versions_list()
+
+    add_deps("openssl")
 
     if is_plat("macosx", "iphoneos") then
         add_frameworks("Security", "CoreFoundation", "SystemConfiguration")
